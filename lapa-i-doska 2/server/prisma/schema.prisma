@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role          { CLIENT MANAGER MASTER ADMIN }
+enum OrderStatus   { NEW AWAITING_APPROVAL IN_PRODUCTION READY DELIVERED CANCELLED }
+enum PaymentStatus { UNPAID PREPAID PAID }
+enum StageType     { DRAWING CUTTING ASSEMBLY PAINTING PACKING }
+
+model User {
+  id             Int      @id @default(autoincrement())
+  fullName       String
+  email          String   @unique
+  phone          String?
+  passwordHash   String
+  role           Role     @default(CLIENT)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  ordersAsClient Order[]  @relation("ClientOrders")
+  ordersAsMaster Order[]  @relation("MasterOrders")
+}
+
+model Product {
+  id            Int         @id @default(autoincrement())
+  name          String
+  description   String
+  category      String
+  basePrice     Int
+  baseVolumeL   Int
+  pricePerLiter Int
+  minWidth      Int
+  maxWidth      Int
+  minDepth      Int
+  maxDepth      Int
+  minHeight     Int
+  maxHeight     Int
+  isArchived    Boolean     @default(false)
+  items         OrderItem[]
+}
+
+model Material {
+  id                 Int     @id @default(autoincrement())
+  name               String
+  coefficientPercent Int
+  isArchived         Boolean @default(false)
+}
+
+model Option {
+  id         Int     @id @default(autoincrement())
+  name       String
+  extraPrice Int
+  isArchived Boolean @default(false)
+}
+
+model Order {
+  id             Int                  @id @default(autoincrement())
+  clientId       Int
+  client         User                 @relation("ClientOrders", fields: [clientId], references: [id])
+  masterId       Int?
+  master         User?                @relation("MasterOrders", fields: [masterId], references: [id])
+  status         OrderStatus          @default(NEW)
+  paymentStatus  PaymentStatus        @default(UNPAID)
+  estimatedPrice Int
+  finalPrice     Int?
+  paidAmount     Int                  @default(0)
+  petNote        String?
+  address        String?
+  clientApproved Boolean              @default(false)
+  cancelReason   String?
+  createdAt      DateTime             @default(now())
+  items          OrderItem[]
+  stages         ProductionStage[]
+  history        OrderStatusHistory[]
+
+  @@index([clientId])
+  @@index([masterId])
+  @@index([status])
+}
+
+model OrderItem {
+  id           Int     @id @default(autoincrement())
+  orderId      Int
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    Int
+  product      Product @relation(fields: [productId], references: [id])
+  productName  String
+  width        Int
+  depth        Int
+  height       Int
+  materialName String
+  options      Json
+  unitPrice    Int
+  quantity     Int
+}
+
+model ProductionStage {
+  id       Int       @id @default(autoincrement())
+  orderId  Int
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stage    StageType
+  doneById Int
+  doneAt   DateTime  @default(now())
+
+  @@unique([orderId, stage])
+}
+
+model OrderStatusHistory {
+  id          Int          @id @default(autoincrement())
+  orderId     Int
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus
+  changedById Int
+  comment     String?
+  createdAt   DateTime     @default(now())
+
+  @@index([orderId])
+}
